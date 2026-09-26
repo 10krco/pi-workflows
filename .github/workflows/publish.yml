@@ -13,7 +13,8 @@ permissions:
 
 jobs:
   publish:
-    if: ${{ !github.event.release.draft && !github.event.release.prerelease }}
+    # This reviewed Git-SHA fork has no npm publication authorization.
+    if: ${{ github.repository != '10krco/pi-workflows' && !github.event.release.draft && !github.event.release.prerelease }}
     runs-on: ubuntu-24.04
     environment: npm
     permissions:

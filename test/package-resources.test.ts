@@ -93,12 +93,16 @@ describe("Pi package resources", () => {
     expect(manifest.dependencies?.["@earendil-works/pi-server"]).toBe("0.87.1");
   });
 
-  it("ships one matching Herdr plugin from the package root", async () => {
+  it("ships matching Herdr and installed TUI versions from the package root", async () => {
     const manifest = JSON.parse(await fs.readFile(packageJsonPath, "utf8")) as PackageManifest;
     const herdrManifest = await fs.readFile(path.join(repoRoot, "herdr-plugin.toml"), "utf8");
+    const cargoManifest = await fs.readFile(path.join(repoRoot, "tui/Cargo.toml"), "utf8");
+    const cargoLock = await fs.readFile(path.join(repoRoot, "tui/Cargo.lock"), "utf8");
 
     expect(herdrManifest).toContain('id = "osolmaz.pi-workflows"');
     expect(herdrManifest).toContain(`version = "${manifest.version}"`);
+    expect(cargoManifest).toContain(`version = "${manifest.version}"`);
+    expect(cargoLock).toContain(`name = "pi-workflows"\nversion = "${manifest.version}"`);
     expect(herdrManifest).toContain('command = ["node", "plugins/herdr/viewer.mjs"]');
     await expect(fs.stat(path.join(repoRoot, "plugins/herdr/viewer.mjs"))).resolves.toBeDefined();
   });

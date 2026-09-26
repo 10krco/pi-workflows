@@ -117,3 +117,26 @@ jobs:
 
       - name: Test (includes TS render parity fixtures)
         run: cargo test
+
+  build:
+    name: build
+    needs: [check, e2e, installed-e2e, tui]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require all prerequisite jobs to succeed
+        env:
+          PREREQUISITES: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          jobs = json.loads(os.environ['PREREQUISITES'])
+          failed = {name: job['result'] for name, job in jobs.items()
+                    if job['result'] != 'success'}
+          if not jobs or failed:
+              print(f'Required prerequisites did not succeed: {failed or "none configured"}')
+              sys.exit(1)
+          print('All required CI prerequisites succeeded')
+          PY
