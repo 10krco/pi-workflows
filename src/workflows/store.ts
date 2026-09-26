@@ -144,6 +144,7 @@ export type WorkflowRunDisplayState = {
 
 export type WorkflowRunTerminalData = {
   runId: string;
+  terminalTurn: "model" | "notify";
   status: "completed" | "failed" | "timed_out" | "cancelled";
   statusDetail: string | null;
   input: JsonValue;
@@ -2320,21 +2321,34 @@ export class WorkflowRunStore {
   readTerminalData(runId: string): WorkflowRunTerminalData | null {
     const row = this.state.connection
       .prepare(
-        `SELECT status, status_detail AS statusDetail, restart_number AS restartNumber
-         FROM runs WHERE run_id = ?`,
+        `SELECT r.status, r.status_detail AS statusDetail, r.restart_number AS restartNumber,
+                d.definition_hash AS definitionHash
+         FROM runs r JOIN workflow_definitions d ON d.definition_digest = r.definition_digest
+         WHERE r.run_id = ?`,
       )
       .get(runId) as
-      | { status?: unknown; statusDetail?: unknown; restartNumber?: unknown }
+      | {
+          status?: unknown;
+          statusDetail?: unknown;
+          restartNumber?: unknown;
+          definitionHash?: unknown;
+        }
       | undefined;
     if (
       row === undefined ||
       !["completed", "failed", "timed_out", "cancelled"].includes(String(row.status)) ||
-      typeof row.restartNumber !== "number"
+      typeof row.restartNumber !== "number" ||
+      !Buffer.isBuffer(row.definitionHash)
     ) {
       return null;
     }
+    const terminalTurn = this.readDefinition(row.definitionHash).terminalTurn ?? "model";
+    if (terminalTurn !== "model" && terminalTurn !== "notify") {
+      throw new Error("Stored workflow terminalTurn is invalid");
+    }
     return {
       runId,
+      terminalTurn,
       status: row.status as WorkflowRunTerminalData["status"],
       statusDetail: typeof row.statusDetail === "string" ? row.statusDetail : null,
       input: this.readRunInput(runId) as JsonValue,
@@ -5093,6 +5107,7 @@ export function createDefinitionSnapshot(workflow: WorkflowDefinition): Workflow
     schema: DEFINITION_SNAPSHOT_SCHEMA,
     name: workflow.name,
     ...(workflow.contractId !== undefined ? { contractId: workflow.contractId } : {}),
+    ...(workflow.terminalTurn !== undefined ? { terminalTurn: workflow.terminalTurn } : {}),
     startAt: workflow.startAt,
     nodes: Object.fromEntries(
       Object.entries(workflow.nodes).map(([nodeId, node]) => [

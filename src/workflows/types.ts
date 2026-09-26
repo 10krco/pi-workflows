@@ -553,6 +553,8 @@ export type WorkflowDefinition<
   source?: string;
   /** Stable public input-and-exit contract identity for compatible overrides. */
   contractId?: string;
+  /** "notify" shows the terminal result without an automatic, unrestricted Pi model turn. */
+  terminalTurn?: "model" | "notify";
   /** Optional runtime input normalizer and validator. */
   input?: WorkflowValueParser<TInput>;
   /** Optional human-readable run title (static or derived from input). */
@@ -727,6 +729,7 @@ export type WorkflowDefinitionSnapshot = {
   schema: "pi-workflows.definition-snapshot.v1";
   name: string;
   contractId?: string;
+  terminalTurn?: "model" | "notify";
   startAt: string;
   nodes: Record<string, WorkflowNodeSnapshot>;
   edges: WorkflowEdge[];

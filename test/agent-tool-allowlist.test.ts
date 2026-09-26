@@ -8,7 +8,7 @@ import {
   includeWorkflow,
 } from "../src/workflows/definition.js";
 import { WorkflowEngine } from "../src/workflows/engine.js";
-import { createDefinitionSnapshot } from "../src/workflows/store.js";
+import { createDefinitionSnapshot, WorkflowRunStore } from "../src/workflows/store.js";
 import { makeStateDatabasePath, ScriptedExecutor } from "./helpers.js";
 
 describe("agent tool allowlists", () => {
@@ -80,6 +80,44 @@ describe("agent tool allowlists", () => {
       expect(createDefinitionSnapshot(compileWorkflowDefinition(parent))).not.toEqual(snapshot);
     },
   );
+
+  it("binds passive terminal delivery to the editable root definition and stored run", async () => {
+    const workflow = defineWorkflow({
+      name: "passive-terminal",
+      terminalTurn: "notify",
+      startAt: "inspect",
+      nodes: { inspect: agent({ prompt: () => "Inspect", allowedTools: [] }) },
+      edges: [],
+    });
+    expect(createDefinitionSnapshot(compileWorkflowDefinition(workflow)).terminalTurn).toBe(
+      "notify",
+    );
+    expect(() =>
+      defineWorkflow({
+        ...workflow,
+        name: "invalid-terminal",
+        terminalTurn: "unrestricted" as never,
+      }),
+    ).toThrow(/terminalTurn must be model or notify/);
+    const databasePath = await makeStateDatabasePath("passive-terminal");
+    const executor = new ScriptedExecutor().respond("inspect", { output: "done" });
+    const { state } = await new WorkflowEngine({ executor, databasePath }).run(workflow, {});
+    expect(state.status).toBe("completed");
+    const store = new WorkflowRunStore(databasePath);
+    try {
+      expect(store.readTerminalData(state.runId)?.terminalTurn).toBe("notify");
+    } finally {
+      store.close();
+    }
+    expect(
+      createDefinitionSnapshot(
+        compileWorkflowDefinition({
+          ...workflow,
+          terminalTurn: "model",
+        }),
+      ).terminalTurn,
+    ).toBe("model");
+  });
 
   it("fails before calling an executor that cannot enforce restrictions", async () => {
     const runAgentStep = vi.fn();

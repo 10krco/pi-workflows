@@ -187,6 +187,15 @@ describe("workflow message content", () => {
     ).toMatchObject({ customType: "pi-workflows-terminal", display: true, triggerTurn: true });
     expect(
       terminalWorkflowMessageContent({
+        workflowMessageId: "passive-message",
+        runId: "restricted-run",
+        content: "Done without starting another model turn.",
+        details: { status: "completed" },
+        triggerTurn: false,
+      }),
+    ).toMatchObject({ customType: "pi-workflows-terminal", display: true, triggerTurn: false });
+    expect(
+      terminalWorkflowMessageContent({
         workflowMessageId: "cancelled-message",
         runId: "cancelled-run",
         content: "Cancelled.",

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -3514,6 +3515,40 @@ export { default } from ${JSON.stringify(path.resolve("examples/workflows/echo.w
       expect(messages[0]?.content.content).toBe("ServerBacked progress.");
       expect(messages[1]?.content.content).toContain('"finalOutput":{"delivered":true}');
       expect(messages[1]?.content).toMatchObject({ display: true, triggerTurn: true });
+      // A pre-upgrade run may already have a model terminal turn in flight.
+      // Omitting terminalTurn must keep its old fingerprint and message ID,
+      // rather than creating a second privileged automatic terminal turn.
+      const deliveredTerminal = messages[1];
+      if (deliveredTerminal === undefined) throw new Error("terminal workflow message missing");
+      const terminalFacts = (
+        deliveredTerminal.content.details as {
+          terminal: {
+            workflowRef: string;
+            input: unknown;
+            status: string;
+            finalOutput: unknown;
+            error: string | null;
+            reason: string | null;
+            terminalTurn: string;
+            terminalFingerprint: string;
+          };
+        }
+      ).terminal;
+      expect(terminalFacts.terminalTurn).toBe("model");
+      expect(terminalFacts.terminalFingerprint).toBe(
+        createHash("sha256")
+          .update(
+            canonicalJson({
+              workflowRef: terminalFacts.workflowRef,
+              input: terminalFacts.input,
+              status: terminalFacts.status,
+              finalOutput: terminalFacts.finalOutput,
+              error: terminalFacts.error,
+              reason: terminalFacts.reason,
+            }),
+          )
+          .digest("hex"),
+      );
 
       // The detailed viewer reads the complete message history through the
       // `workflow_messages` run page and the updates page stays its own kind.
@@ -3570,8 +3605,7 @@ export { default } from ${JSON.stringify(path.resolve("examples/workflows/echo.w
         }),
       ).toMatchObject({ receipt: { outcome: "present" } });
       // The terminal message is current once the notification has an entry.
-      const terminal = messages[1];
-      if (terminal === undefined) throw new Error("terminal workflow message missing");
+      const terminal = deliveredTerminal;
       expect(await currentWorkflowMessageId(client, authority.targetSessionId)).toBe(
         terminal.workflowMessageId,
       );

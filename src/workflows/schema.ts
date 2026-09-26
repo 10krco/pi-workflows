@@ -314,6 +314,13 @@ export function assertValidWorkflowDefinitionShape(
   ) {
     fail("workflow contractId must be a stable identifier");
   }
+  if (
+    definition.terminalTurn !== undefined &&
+    definition.terminalTurn !== "model" &&
+    definition.terminalTurn !== "notify"
+  ) {
+    fail("workflow terminalTurn must be model or notify");
+  }
   assertOptionalFunction(definition.input, "workflow input");
   if (definition.settings !== undefined) {
     assertRecord(definition.settings, "workflow settings");
