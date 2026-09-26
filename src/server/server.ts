@@ -4736,7 +4736,9 @@ export class WorkflowServer {
         canonicalJson({
           workflowRef: queue.workflowSourceRef,
           input,
-          terminalTurn: terminal.terminalTurn,
+          // Preserve the pre-upgrade identity of existing default (model)
+          // terminal messages; only the opt-in passive terminal has a new ID.
+          ...(terminal.terminalTurn === "notify" ? { terminalTurn: "notify" } : {}),
           status: terminalFacts.status,
           finalOutput,
           error: terminalFacts.error,
