@@ -1,5 +1,20 @@
 # pi-workflows
 
+## 10krco Foundry fork
+
+This fork pins Pi's own 0.87.1 coding-agent and server packages as runtime
+dependencies because the workflow server imports the coding-agent package from
+its isolated module root. A peer dependency alone did not resolve during a
+clean-profile upstream Pi install. This duplicates some Pi package modules;
+that is a verified packaging workaround, not a new workflow engine. Install a
+reviewed **exact fork commit** via
+`pi install git:github.com/10krco/pi-workflows@<commit>`. Do not install
+floating upstream for Foundry runtime use. The seeded Foundry workflow must
+allow untrusted autonomous tool calls only through its separately verified
+`foundry_exec` tool; `shell()` and workflow `action` callbacks remain privileged
+host effects, and editable project workflow code is trusted. Merely using this
+fork does not provide OS isolation or acceptance of Foundry defaults.
+
 <p align="center">
   <img src="assets/cover.svg" alt="pi-workflows: a representative multi-step workflow graph with plan, implement, verify, review, a fix loop, and a clean finish" width="880">
 </p>
