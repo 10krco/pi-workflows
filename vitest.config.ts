@@ -15,6 +15,10 @@ export default defineConfig({
   },
   test: {
     globalSetup: ["./test/global-setup.ts"],
+    // Many suites spawn SQLite workflow servers. On small CI runners, the
+    // default file parallelism starves the 300-node pagination fixture and
+    // makes its existing 60s timeout an unreliable signal of correctness.
+    maxWorkers: process.env.CI ? 2 : undefined,
     testTimeout: 15_000,
     include: ["test/**/*.test.ts"],
     exclude: ["test/e2e/**", "node_modules/**"],
