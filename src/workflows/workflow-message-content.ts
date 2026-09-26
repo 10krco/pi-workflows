@@ -118,6 +118,8 @@ export function terminalWorkflowMessageContent(options: {
   runId: string;
   content: string;
   details: JsonValue;
+  /** A source-bound root workflow may request a passive terminal notification. */
+  triggerTurn?: boolean;
 }): WorkflowMessageContent {
   return {
     schema: WORKFLOW_MESSAGE_CONTENT_SCHEMA,
@@ -130,7 +132,9 @@ export function terminalWorkflowMessageContent(options: {
       kind: "terminal",
       terminal: options.details,
     },
-    triggerTurn: !(isRecord(options.details) && options.details.status === "cancelled"),
+    triggerTurn:
+      options.triggerTurn !== false &&
+      !(isRecord(options.details) && options.details.status === "cancelled"),
   };
 }
 

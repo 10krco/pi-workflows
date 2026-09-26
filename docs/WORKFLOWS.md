@@ -80,19 +80,20 @@ export default defineWorkflow({
 
 Top-level fields:
 
-| Field        | Type                      | Notes                                                                                                                                                  |
-| ------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`       | `string`                  | Required. Used in run ids and the step contract. `answer`, `cancel`, `list`, `pause`, `resume`, and `status` are reserved for `/workflow` subcommands. |
-| `source`     | `string`                  | Optional `import.meta.url` for exact provenance when another TypeScript workflow imports this definition directly.                                     |
-| `contractId` | `string`                  | Optional stable input-and-exit contract identity. Dynamic overrides must match it.                                                                     |
-| `input`      | `function`                | Optional runtime input normalizer and validator. Its return type is the workflow input type.                                                           |
-| `title`      | `string` or function      | Optional run title, resolved once at start from `{ input, workflowName }`. Async resolution is bounded (30s) and cancellable.                          |
-| `startAt`    | `string`                  | Required. Id of the first node.                                                                                                                        |
-| `nodes`      | `Record<string, node>`    | Required, non-empty. Node ids must match `[A-Za-z_][A-Za-z0-9_-]*`.                                                                                    |
-| `includes`   | `Record<string, include>` | Optional imported or dynamically resolved child workflows.                                                                                             |
-| `exits`      | `Record<string, exit>`    | Optional named successful terminal nodes used when another workflow includes this workflow.                                                            |
-| `edges`      | `WorkflowEdge[]`          | Required. See routing below.                                                                                                                           |
-| `maxSteps`   | `number`                  | Optional loop bound, default 100. The run fails when exceeded.                                                                                         |
+| Field          | Type                      | Notes                                                                                                                                                          |
+| -------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | `string`                  | Required. Used in run ids and the step contract. `answer`, `cancel`, `list`, `pause`, `resume`, and `status` are reserved for `/workflow` subcommands.         |
+| `source`       | `string`                  | Optional `import.meta.url` for exact provenance when another TypeScript workflow imports this definition directly.                                             |
+| `contractId`   | `string`                  | Optional stable input-and-exit contract identity. Dynamic overrides must match it.                                                                             |
+| `terminalTurn` | `"model" \| "notify"`     | Optional; `model` (default) starts a regular model turn after completion. `notify` displays the terminal result without triggering an automatic Pi model turn. |
+| `input`        | `function`                | Optional runtime input normalizer and validator. Its return type is the workflow input type.                                                                   |
+| `title`        | `string` or function      | Optional run title, resolved once at start from `{ input, workflowName }`. Async resolution is bounded (30s) and cancellable.                                  |
+| `startAt`      | `string`                  | Required. Id of the first node.                                                                                                                                |
+| `nodes`        | `Record<string, node>`    | Required, non-empty. Node ids must match `[A-Za-z_][A-Za-z0-9_-]*`.                                                                                            |
+| `includes`     | `Record<string, include>` | Optional imported or dynamically resolved child workflows.                                                                                                     |
+| `exits`        | `Record<string, exit>`    | Optional named successful terminal nodes used when another workflow includes this workflow.                                                                    |
+| `edges`        | `WorkflowEdge[]`          | Required. See routing below.                                                                                                                                   |
+| `maxSteps`     | `number`                  | Optional loop bound, default 100. The run fails when exceeded.                                                                                                 |
 
 `defineWorkflow` validates the shape eagerly (node ids, edge shapes, function
 fields) and validates the graph (unknown targets, duplicate outgoing edges,
@@ -211,7 +212,7 @@ retain only their human response path. Ordinary chat is not workflow activity.
 
 `allowedTools` optionally restricts a step to exact tool names, for example `allowedTools: ["read", "grep", "find", "ls"]`. Omit it for the normal tool set; use `[]` to permit only matching workflow `submit` and `update` calls. Do not include `workflow` in the list. Restrictions remain in composed child graphs, definition snapshots, and the durable step contract. Changing them requires a new run under the fixed-definition rule.
 
-The origin Pi extension blocks other calls through public `tool_call` before execution, including while delivery acknowledgment is pending. It applies the restriction only to the workflow-owned running turn, not later ordinary chat. This is an exact tool allowlist, not a filesystem sandbox: authors must trust the implementations of the tools they allow. No shell is implicitly read-only.
+The origin Pi extension blocks other calls through public `tool_call` before execution, including while delivery acknowledgment is pending. It applies the restriction only to the workflow-owned running turn, not later ordinary chat. **The default automatic terminal turn is ordinary Pi chat with its normal tools, not the final agent step's allowlist.** A workflow that isolates project commands should declare `terminalTurn: "notify"` at its root: its terminal result remains visible, but Pi does not start a privileged automatic model turn afterward. The developer may edit this root setting; an explicit later user message retains ordinary Pi tools. This is an exact tool allowlist, not a filesystem sandbox: authors must trust the implementations of the tools they allow. No shell is implicitly read-only.
 
 An executor must declare `enforcesToolAllowlist: true` only when it enforces that contract before every tool call. The current headless RPC executor does not support restricted steps. The engine rejects such a step before calling that executor rather than silently dropping its restriction; use an origin Pi session. Scripted executors that run no model tools can declare support.
 
