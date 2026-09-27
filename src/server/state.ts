@@ -53,6 +53,9 @@ export type WorkflowRunnerLaunchEnvelope = {
   generation: number;
   runnerEpoch: string;
   projectPath: string;
+  /** The queue's Pi session binding. Optional for older persisted launch
+   * envelopes; null for headless runs. Never sourced from workflow input. */
+  originSessionId?: string | null;
   workflowSource: JsonValue;
   definitionDigest: string;
   inputHash: string;

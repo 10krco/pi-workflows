@@ -69,7 +69,7 @@ async function writeComputeWorkflow(cwd: string): Promise<string> {
 export default defineWorkflow({
   name: "server-compute",
   startAt: "work",
-  nodes: { work: compute({ run: ({ input }) => ({ input, pid: process.pid }) }) },
+  nodes: { work: compute({ run: ({ input, originSessionId }) => ({ input, pid: process.pid, originSessionId: originSessionId ?? null }) }) },
   edges: [],
 });\n`,
   );
@@ -3472,6 +3472,53 @@ export { default } from ${JSON.stringify(path.resolve("examples/workflows/echo.w
         expect(store.getWorkflowRun("child-run")).toMatchObject({
           status: "done",
           executionMode: "headless",
+        });
+      } finally {
+        store.close();
+      }
+      const runStore = new WorkflowRunStore(databasePath, { readOnly: true });
+      try {
+        expect(runStore.readRun("child-run")?.state.finalOutput).toMatchObject({
+          originSessionId: null,
+        });
+      } finally {
+        runStore.close();
+      }
+    } finally {
+      await server.stop();
+    }
+  }, 45_000);
+
+  it("binds action context to the server-owned interactive Pi session, not a claimed input", async () => {
+    const cwd = await makeTempDir("server-session-provenance-project");
+    const databasePath = path.join(
+      await makeTempDir("server-session-provenance-state"),
+      "state.sqlite",
+    );
+    const workflowPath = await writeComputeWorkflow(cwd);
+    const server = new WorkflowServer({ databasePath, claimPollMs: 10 });
+    const client = new WorkflowClient({ databasePath });
+    await server.start();
+    try {
+      await startRun({
+        client,
+        cwd,
+        workflowPath,
+        runId: "session-provenance-interactive",
+        executionMode: "interactive",
+      });
+      await waitUntil(() => {
+        const store = new WorkflowRunQueueStore(databasePath, { readOnly: true, global: true });
+        try {
+          return store.getWorkflowRun("session-provenance-interactive")?.status === "done";
+        } finally {
+          store.close();
+        }
+      }, 30_000);
+      const store = new WorkflowRunStore(databasePath, { readOnly: true });
+      try {
+        expect(store.readRun("session-provenance-interactive")?.state.finalOutput).toMatchObject({
+          originSessionId: "server-test-session",
         });
       } finally {
         store.close();

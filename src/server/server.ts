@@ -4017,6 +4017,7 @@ export class WorkflowServer {
       generation,
       runnerEpoch: randomUUID(),
       projectPath,
+      originSessionId: record.executionMode === "interactive" ? record.originSessionId : null,
       workflowSource: record.workflowSource as JsonValue,
       definitionDigest: record.definitionDigest,
       inputHash: `sha256:${createHash("sha256").update(canonicalJson(record.input)).digest("hex")}`,
