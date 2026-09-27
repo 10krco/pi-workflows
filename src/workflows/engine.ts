@@ -122,6 +122,7 @@ export class WorkflowEngine {
   private readonly executor: AgentStepExecutor;
   private readonly notificationSink: WorkflowNotificationSink | undefined;
   private readonly store: WorkflowExecutionStore;
+  private readonly originSessionId: string | null;
   private readonly defaultNodeTimeoutMs: number;
   private readonly maxSteps: number;
   private readonly onEvent?: WorkflowEngineOptions["onEvent"];
@@ -148,6 +149,13 @@ export class WorkflowEngine {
     this.executor = options.executor;
     this.notificationSink = options.notificationSink;
     this.store = options.store ?? new WorkflowRunStore(options.databasePath);
+    if (
+      options.originSessionId != null &&
+      (typeof options.originSessionId !== "string" || !options.originSessionId.trim())
+    ) {
+      throw new Error("Invalid workflow origin Pi session identity");
+    }
+    this.originSessionId = options.originSessionId ?? null;
     this.defaultNodeTimeoutMs = options.defaultNodeTimeoutMs ?? DEFAULT_NODE_TIMEOUT_MS;
     this.maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
     this.onEvent = options.onEvent;
@@ -1269,6 +1277,7 @@ export class WorkflowEngine {
     const snapshot = deepFreezeJson(structuredClone(state));
     return {
       input: snapshot.input,
+      ...(this.originSessionId === null ? {} : { originSessionId: this.originSessionId }),
       outputs: snapshot.outputs,
       results: snapshot.results,
       state: snapshot,

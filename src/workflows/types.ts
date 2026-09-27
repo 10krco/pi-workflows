@@ -7,6 +7,9 @@ export type MaybePromise<T> = T | Promise<T>;
  */
 export type WorkflowNodeContext<TInput = unknown, TSettings = unknown> = {
   input: TInput;
+  /** Authoritative Pi session from the server claim, if interactive. Absent for
+   * standalone/headless runs. This is identity, not a human-approval receipt. */
+  originSessionId?: string;
   outputs: Record<string, unknown>;
   results: Record<string, WorkflowNodeResult>;
   state: WorkflowRunState;
@@ -941,6 +944,8 @@ export type WorkflowEngineOptions = {
   databasePath?: string;
   /** Durable execution store. Runners use a server-backed implementation. */
   store?: import("./store.js").WorkflowExecutionStore;
+  /** Pi session passed by the trusted server runner claim, not workflow input. */
+  originSessionId?: string | null;
   /**
    * Awaited after `run_started` is persisted, before any node executes.
    */

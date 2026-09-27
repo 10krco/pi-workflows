@@ -211,6 +211,15 @@ export default defineWorkflow({ name: "agent", startAt: "work", nodes: { work: a
         cwd: test.cwd,
         workflowRef: workflowPath,
       });
+      const watched = await test.client.request({
+        operation: "view.session.watch",
+        payload: { subscriptionId: "scheduler", sessionId: "scheduler-session", coordinator: true },
+      });
+      const authority = {
+        targetSessionId: "scheduler-session",
+        coordinatorEpoch: (watched.receipt as { coordinatorEpoch: string }).coordinatorEpoch,
+      };
+      expect((await reportBranch(test.client, authority)).outcome).toBe("accepted");
       expect(
         (
           await test.client.request({
@@ -219,7 +228,8 @@ export default defineWorkflow({ name: "agent", startAt: "work", nodes: { work: a
             payload: {
               ...resolved,
               projectPath: test.cwd,
-              originSessionId: "scheduler-session",
+              originSessionId: "untrusted-payload-session",
+              ...authority,
               executionMode: "interactive",
               input: {},
               launchOptions: {},
@@ -232,15 +242,6 @@ export default defineWorkflow({ name: "agent", startAt: "work", nodes: { work: a
       if (interaction === undefined) throw new Error("Missing request");
       await test.start("blocker");
       await waitUntil(() => existsSync(path.join(test.cwd, "blocker.started")), 30_000);
-      const watched = await test.client.request({
-        operation: "view.session.watch",
-        payload: { subscriptionId: "scheduler", sessionId: "scheduler-session", coordinator: true },
-      });
-      const authority = {
-        targetSessionId: "scheduler-session",
-        coordinatorEpoch: (watched.receipt as { coordinatorEpoch: string }).coordinatorEpoch,
-      };
-      expect((await reportBranch(test.client, authority)).outcome).toBe("accepted");
       const submitted = test.client.request({
         operation: "interaction.submit",
         idempotencyKey: "result",

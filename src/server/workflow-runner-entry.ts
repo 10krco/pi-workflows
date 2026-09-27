@@ -408,6 +408,7 @@ export async function runWorkflowRunner(): Promise<number> {
     const engine = new WorkflowEngine({
       store,
       executor,
+      ...(launch.originSessionId === undefined ? {} : { originSessionId: launch.originSessionId }),
       notificationSink: {
         notify: async (request) => await store.requestNotification(request),
       },
