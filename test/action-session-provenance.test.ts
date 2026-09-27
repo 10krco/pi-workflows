@@ -2,7 +2,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { action, defineWorkflow, manualEffect } from "../src/workflows/definition.js";
+import {
+  action,
+  compute,
+  defineWorkflow,
+  includeWorkflow,
+  manualEffect,
+} from "../src/workflows/definition.js";
 import { WorkflowEngine } from "../src/workflows/engine.js";
 import { WorkflowRunStore } from "../src/workflows/store.js";
 
@@ -63,6 +69,68 @@ describe("action context Pi session provenance", () => {
         actualSessionId: null,
       },
     });
+  });
+  it("preserves the live session ID across root and nested action contexts", async () => {
+    const child = defineWorkflow({
+      name: "bound-child",
+      startAt: "inspect",
+      exits: { returned: { from: "inspect" } },
+      nodes: {
+        inspect: action({
+          effect: manualEffect("test.bound-child"),
+          run: ({ originSessionId, input }) => ({
+            actual: originSessionId ?? null,
+            claimed: (input as { originSessionId?: string }).originSessionId ?? null,
+          }),
+        }),
+      },
+      edges: [],
+    });
+    const parent = defineWorkflow({
+      name: "bound-parent",
+      startAt: "inspect",
+      includes: { child: includeWorkflow(child, { input: ({ input }) => input }) },
+      nodes: {
+        inspect: action({
+          effect: manualEffect("test.bound-parent"),
+          run: ({ originSessionId, input }) => ({
+            actual: originSessionId ?? null,
+            claimed: (input as { originSessionId?: string }).originSessionId ?? null,
+          }),
+        }),
+        done: compute({ run: ({ outputs }) => ({ root: outputs.inspect, child: outputs.child }) }),
+      },
+      edges: [
+        { from: "inspect", to: "child" },
+        { from: "child.returned", to: "done" },
+      ],
+    });
+    const dir = await mkdtemp(path.join(os.tmpdir(), "pi-workflows-composed-provenance-"));
+    directories.push(dir);
+    const store = new WorkflowRunStore(path.join(dir, "runs.sqlite"));
+    try {
+      for (const [name, originSessionId] of [
+        ["bound", "live-session"],
+        ["unbound", undefined],
+      ] as const) {
+        const engine = new WorkflowEngine({
+          store,
+          executor: {} as never,
+          ...(originSessionId === undefined ? {} : { originSessionId }),
+        });
+        const result = await engine.run(parent, { originSessionId: "fabricated" }, { runId: name });
+        expect(result.state.status).toBe("completed");
+        expect(result.state.finalOutput).toMatchObject({
+          root: { actual: originSessionId ?? null, claimed: "fabricated" },
+          child: {
+            exit: "returned",
+            output: { actual: originSessionId ?? null, claimed: "fabricated" },
+          },
+        });
+      }
+    } finally {
+      store.close();
+    }
   });
   it("rejects malformed trusted options", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "pi-workflows-invalid-session-"));

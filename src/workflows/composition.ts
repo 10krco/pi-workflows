@@ -681,6 +681,10 @@ export function projectWorkflowContext(
   };
   return {
     input: localInput,
+    // This is supplied by the executing engine from the live coordinator's
+    // session-bound launch, never by a workflow input or a projected state.
+    // Keep it on both the root and nested scopes of a composed graph.
+    ...(context.originSessionId === undefined ? {} : { originSessionId: context.originSessionId }),
     outputs,
     results,
     state,
