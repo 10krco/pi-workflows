@@ -968,7 +968,7 @@ async function executeCommand(
           definitionSnapshot: resolved.definitionSnapshot,
           input: jsonValue(command.input),
           launchOptions: {},
-          originSessionId: ctx.sessionManager.getSessionId(),
+          ...sessionCommandPayload(ctx),
           executionMode: "interactive",
         },
       });

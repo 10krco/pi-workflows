@@ -35,6 +35,15 @@ export default defineWorkflow({ name: "restart-follow-up", startAt: "done", node
   const queue = new WorkflowRunQueueStore(databasePath, { readOnly: true, global: true });
   try {
     const resolved = await client.resolveWorkflow({ cwd, workflowRef: workflowPath });
+    const watched = await client.request({
+      operation: "view.session.watch",
+      payload: { subscriptionId: "owner", sessionId: "session", coordinator: true },
+    });
+    const authority = {
+      targetSessionId: "session",
+      coordinatorEpoch: (watched.receipt as { coordinatorEpoch: string }).coordinatorEpoch,
+    };
+    expect(await reportBranch(client, authority)).toMatchObject({ outcome: "accepted" });
     expect(
       await client.request({
         operation: "run.start",
@@ -44,25 +53,13 @@ export default defineWorkflow({ name: "restart-follow-up", startAt: "done", node
           ...resolved,
           input: {},
           launchOptions: {},
-          originSessionId: "session",
+          originSessionId: "untrusted-payload-session",
+          ...authority,
           executionMode: "interactive",
         },
       }),
     ).toMatchObject({ outcome: "accepted" });
     await waitUntil(() => runs.readRun("original")?.state.status === "running", 30_000);
-    const watched = await client.request({
-      operation: "view.session.watch",
-      payload: {
-        subscriptionId: "owner",
-        sessionId: "session",
-        coordinator: true,
-      },
-    });
-    const authority = {
-      targetSessionId: "session",
-      coordinatorEpoch: (watched.receipt as { coordinatorEpoch: string }).coordinatorEpoch,
-    };
-    expect(await reportBranch(client, authority)).toMatchObject({ outcome: "accepted" });
     const followUpResponse = await client.request({
       operation: "followUp.queue",
       runId: "original",
@@ -123,6 +120,12 @@ export default defineWorkflow({ name: "restart", startAt: "done",
   const store = new WorkflowRunQueueStore(databasePath, { readOnly: true, global: true });
   try {
     const resolved = await client.resolveWorkflow({ cwd, workflowRef: workflowPath });
+    const watch = await client.request({
+      operation: "view.session.watch",
+      payload: { subscriptionId: "restart-watch", sessionId: "session", coordinator: true },
+    });
+    const coordinatorEpoch = (watch.receipt as { coordinatorEpoch: string }).coordinatorEpoch;
+    await reportBranch(client, { targetSessionId: "session", coordinatorEpoch });
     await client.request({
       operation: "run.start",
       runId: "original",
@@ -131,20 +134,12 @@ export default defineWorkflow({ name: "restart", startAt: "done",
         ...resolved,
         input: { original: true },
         launchOptions: {},
-        originSessionId: "session",
+        originSessionId: "untrusted-payload-session",
+        targetSessionId: "session",
+        coordinatorEpoch,
         executionMode: "interactive",
       },
     });
-    const watch = await client.request({
-      operation: "view.session.watch",
-      payload: {
-        subscriptionId: "restart-watch",
-        sessionId: "session",
-        coordinator: true,
-      },
-    });
-    const coordinatorEpoch = (watch.receipt as { coordinatorEpoch: string }).coordinatorEpoch;
-    await reportBranch(client, { targetSessionId: "session", coordinatorEpoch });
     let runId = "original";
     for (let restartNumber = 1; restartNumber <= 5; restartNumber += 1) {
       await waitUntil(() => store.getWorkflowRun(runId)?.status === "done", 30_000);

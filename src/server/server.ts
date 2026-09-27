@@ -1708,7 +1708,7 @@ export class WorkflowServer {
       case "followUp.remove":
         return this.removeSessionFollowUp(request, this.requireSessionCommand(connection, request));
       case "run.start":
-        return this.startRun(request, afterCommit);
+        return this.startRun(request, afterCommit, connection);
       case "checkpoint.answer":
         return this.answerCheckpoint(request, afterCommit);
       case "resourceManager.list":
@@ -2449,6 +2449,7 @@ export class WorkflowServer {
   private startRun(
     request: ClientRequest,
     afterCommit: Array<() => void>,
+    connection: ClientConnection | undefined,
   ): Omit<ClientResponse, "schema" | "type" | "requestId"> {
     const runId = requireRunId(request);
     const payload = requireRecord(request.payload, "run.start payload");
@@ -2456,8 +2457,13 @@ export class WorkflowServer {
     const workflowName = requireString(payload.workflowName, "workflowName");
     const workflowSourceRef = requireString(payload.workflowSourceRef, "workflowSourceRef");
     const definitionDigest = requireString(payload.definitionDigest, "definitionDigest");
-    const originSessionId = requireString(payload.originSessionId, "originSessionId");
     const executionMode = payload.executionMode === "headless" ? "headless" : "interactive";
+    // Interactive runs must be claimed by the live session coordinator on
+    // this connection, never by an arbitrary originSessionId in the payload.
+    const originSessionId =
+      executionMode === "interactive"
+        ? this.requireSessionCommand(connection, request).targetSessionId
+        : requireString(payload.originSessionId, "originSessionId");
     const recoverySource =
       this.queue.getWorkflowRun(runId) === undefined
         ? this.recovery.sourceForLaunch(originSessionId)

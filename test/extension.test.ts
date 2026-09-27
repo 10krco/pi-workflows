@@ -1780,9 +1780,15 @@ export default defineResourceManager({
         sessionId,
         (event) => {
           listener(event);
-          // One lost subscription: the client keeps its last snapshot for display
-          // and removes the authority to deliver from it.
-          if (dropped || event.event !== "session_snapshot") return;
+          // Drop only after the run has been accepted. An initial lost
+          // subscription must now refuse run.start rather than launching an
+          // interactive run without a live coordinator.
+          if (
+            dropped ||
+            event.event !== "session_snapshot" ||
+            !(event.payload as { run?: unknown } | undefined)?.run
+          )
+            return;
           dropped = true;
           listener({
             schema: CLIENT_PROTOCOL_SCHEMA,

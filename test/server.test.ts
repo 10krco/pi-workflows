@@ -631,7 +631,13 @@ async function startRun(options: {
   workflowPath: string;
   runId: string;
   executionMode?: "headless" | "interactive";
+  input?: ClientRequest["payload"];
+  authority?: { targetSessionId: string; coordinatorEpoch: string };
 }): Promise<void> {
+  const authority =
+    options.executionMode === "interactive"
+      ? (options.authority ?? (await ownSession(options.client)))
+      : null;
   const resolved = await options.client.resolveWorkflow({
     cwd: options.cwd,
     workflowRef: options.workflowPath,
@@ -646,9 +652,10 @@ async function startRun(options: {
       workflowSource: resolved.workflowSource,
       definitionDigest: resolved.definitionDigest,
       definitionSnapshot: resolved.definitionSnapshot,
-      input: { value: 1 },
+      input: options.input ?? { value: 1 },
       launchOptions: {},
-      originSessionId: "server-test-session",
+      originSessionId: "untrusted-payload-session",
+      ...authority,
       executionMode: options.executionMode ?? "headless",
     },
   });
@@ -1954,6 +1961,7 @@ setInterval(() => {}, 1000);
         workflowPath: await writeChannelDecisionWorkflow(cwd),
         runId: "channel-crash-parent",
         executionMode: "interactive",
+        authority: { targetSessionId: "server-test-session", coordinatorEpoch },
       });
       await waitUntil(() => {
         const state = new ServerStateStore(databasePath, { readOnly: true });
@@ -2860,6 +2868,7 @@ export { default } from ${JSON.stringify(path.resolve("examples/workflows/echo.w
     await server.start();
     try {
       const resolved = await client.resolveWorkflow({ cwd, workflowRef: workflowPath });
+      const authority = await ownSession(client);
       await fs.writeFile(workflowPath, `${originalSource}\n// changed before worker load\n`);
       const response = await client.request({
         operation: "run.start",
@@ -2873,7 +2882,8 @@ export { default } from ${JSON.stringify(path.resolve("examples/workflows/echo.w
           definitionSnapshot: resolved.definitionSnapshot,
           input: { value: 1 },
           launchOptions: {},
-          originSessionId: "server-test-session",
+          originSessionId: "untrusted-payload-session",
+          ...authority,
           executionMode: "interactive",
         },
       });
@@ -3506,7 +3516,36 @@ export { default } from ${JSON.stringify(path.resolve("examples/workflows/echo.w
         workflowPath,
         runId: "session-provenance-interactive",
         executionMode: "interactive",
+        input: { originSessionId: "fabricated" },
       });
+      // Another socket must not forge the live session by naming it in the
+      // launch payload. It has neither the coordinator connection nor epoch.
+      const attacker = new WorkflowClient({ databasePath });
+      try {
+        const resolved = await attacker.resolveWorkflow({ cwd, workflowRef: workflowPath });
+        const spoofed = await attacker.request({
+          operation: "run.start",
+          runId: "spoofed-session-run",
+          payload: {
+            projectPath: cwd,
+            workflowName: resolved.workflowName,
+            workflowSourceRef: resolved.workflowSourceRef,
+            workflowSource: resolved.workflowSource,
+            definitionDigest: resolved.definitionDigest,
+            definitionSnapshot: resolved.definitionSnapshot,
+            input: { originSessionId: "server-test-session" },
+            launchOptions: {},
+            originSessionId: "server-test-session",
+            targetSessionId: "server-test-session",
+            coordinatorEpoch: "forged-epoch",
+            executionMode: "interactive",
+          },
+        });
+        expect(spoofed.outcome).toBe("rejected");
+        expect(spoofed.error).toMatch(/coordinator was replaced/);
+      } finally {
+        await attacker.close();
+      }
       await waitUntil(() => {
         const store = new WorkflowRunQueueStore(databasePath, { readOnly: true, global: true });
         try {
@@ -3519,6 +3558,7 @@ export { default } from ${JSON.stringify(path.resolve("examples/workflows/echo.w
       try {
         expect(store.readRun("session-provenance-interactive")?.state.finalOutput).toMatchObject({
           originSessionId: "server-test-session",
+          input: { originSessionId: "fabricated" },
         });
       } finally {
         store.close();
